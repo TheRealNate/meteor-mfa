@@ -1,4 +1,4 @@
-import MFA from 'meteor/mfa';
+import MFA from 'meteor/ndev:mfa';
 
 class Login extends React.Component {
     

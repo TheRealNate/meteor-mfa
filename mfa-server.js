@@ -343,7 +343,7 @@ Accounts.validateLoginAttempt(options => {
         return options.allowed;
     }
     
-    if(options.methodName === 'resetPassword' && config.requireResetPasswordMFA) {
+    if(options.methodName === 'resetPassword' && config.requireResetPasswordMFA && options.user.services.mfaenabled) {
         try {
             check(options.methodArguments[2], Object);
             check(options.methodArguments[2].challengeId, String);
