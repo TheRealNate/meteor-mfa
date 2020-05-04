@@ -20,6 +20,7 @@ If you are interested in contributing on any of these tasks please reach out!
 - Add "Login other device" support: generate an OTP from a device capable of using U2F to be entered on a device not capable of U2F
 - Support TOTPs (Google Authenticator, Authy)
 - Support requiring more then 2 factors to authenticate
+- Passwordless
 
 ## Installation/Setup
 
