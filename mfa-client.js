@@ -227,4 +227,7 @@ export default {
     
     finishRegisterTOTP,
     registerTOTP,
+    
+    // DEPRECATED in 0.0.3
+    solve:solveU2FChallenge,
 };
