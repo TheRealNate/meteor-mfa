@@ -1,6 +1,6 @@
 Package.describe({
   name: 'ndev:mfa',
-  version: '0.0.2',
+  version: '0.0.3',
   summary: 'Multi Factor Authentication for Meteor (with U2F support)',
   git: 'https://github.com/TheRealNate/meteor-mfa',
   documentation: 'README.md'
