@@ -20,6 +20,7 @@ If you are interested in contributing on any of these tasks please reach out!
 - Add "Login other device" support: generate an OTP from a device capable of using U2F to be entered on a device not capable of U2F
 - Support TOTPs (Google Authenticator, Authy)
 - Support requiring more then 2 factors to authenticate
+- Passwordless
 
 ## Installation/Setup
 
@@ -142,6 +143,29 @@ MFA.resetPassword(token, newPassword).then(r => {
 ````
 
 You should also set `config.requireResetPasswordMFA` to true. This will require that users use MFA when resetting their password.
+
+### Authenticating with an MFA method in a Meteor method
+
+This package exposes the `MFA.generateChallenge` and `MFA.verifyAttestation` methods which allow you to integrate U2F authentication into your method. See an example below which requires the user authenticates before they can disable MFA:
+
+````
+Meteor.methods({
+  "start:disableMFA":function () {
+    let challenge = MFA.generateChallenge(this.userId, "disableMFA");
+    return challenge;
+  },
+  
+  "complete:disableMFA":function (attestation) {
+    let isValid = MFA.verifyAttestation("disableMFA", attestation);
+    
+    if(!isValid) {
+      throw new Meteor.Error(404, "Invalid Attestation");
+    }
+    
+    MFA.disableMFA(this.userId);
+  }  
+});
+````
 
 # Full API Documentation
 
