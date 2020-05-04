@@ -2,9 +2,9 @@ import { Meteor } from 'meteor/meteor';
 import { Accounts } from 'meteor/accounts-base';
 import { solveRegistrationChallenge, solveLoginChallenge } from '@webauthn/client';
 
-import {resetPasswordChallengeHandler, registrationChallengeHandlerU2F, registerCompletionHandlerU2F, loginChallengeHandler, loginCompletionHandlerU2F, loginCompletionHandlerOTP } from './method-names';
+import {registrationChallengeHandlerTOTP, registrationCompletionHandlerTOTP, resetPasswordChallengeHandler, registrationChallengeHandlerU2F, registerCompletionHandlerU2F, loginChallengeHandler, loginCompletionHandler } from './method-names';
 
-let solve = async function (c) {
+let solveU2FChallenge = async function (c) {
     let {challengeId, challengeSecret, assertionChallenge} = c;
     
     let credentials;
@@ -49,6 +49,30 @@ let registerMFA = () => new Promise((resolve, reject) => {
     });
 });
 
+let assembleChallengeCompletionArguments = async function (finishLoginParams, code) {
+    let {res} = finishLoginParams;
+    let methodArguments = [];
+    
+    if(res.method === "u2f") {
+        let assertion = await solveU2FChallenge(res);
+        methodArguments.push(assertion);
+    }
+
+    if(res.method === "otp" || res.method === "totp") {
+        if(!code) {
+            throw new Meteor.Error("otp-required", "An OTP is required");
+        }
+        
+        methodArguments.push({...res, code});
+    }    
+    
+    return methodArguments;
+};
+
+let solveChallenge = async function (challenge, code) {
+    let solvedChallenge = assembleChallengeCompletionArguments({res:challenge}, code)[0];
+    return solvedChallenge;
+};
 
 let finishResetPassword = (finishLoginParams, code) => new Promise(async (resolve, reject) => {
     let {res, token, newPassword} = finishLoginParams;
@@ -66,19 +90,7 @@ let finishResetPassword = (finishLoginParams, code) => new Promise(async (resolv
     }
 
     let methodArguments = [token, Accounts._hashPassword(newPassword)];
-    
-    if(res.method === "u2f") {
-        let assertion = await solve(res);
-        methodArguments.push(assertion);
-    }
-
-    if(res.method === "otp") {
-        if(!code) {
-            return reject(new Meteor.Error("otp-required", "An OTP is required"));
-        }
-        
-        methodArguments.push({...res, code});
-    }
+    methodArguments.concat(await assembleChallengeCompletionArguments(finishLoginParams, code));
     
     Accounts.callLoginMethod({
         methodName: 'resetPassword',
@@ -133,23 +145,8 @@ let resetPassword = (token, newPassword) => new Promise((resolve, reject) => {
 
 
 let finishLogin = (finishLoginParams, code) => new Promise(async (resolve, reject) => {
-    let {res} = finishLoginParams;
-    let methodName, methodArguments = [];
-    
-    if(res.method === "u2f") {
-        let assertion = await solve(res);
-        methodArguments.push(assertion);
-        methodName = loginCompletionHandlerU2F();
-    }
-
-    if(res.method === "otp") {
-        if(!code) {
-            return reject(new Meteor.Error("otp-required", "An OTP is required"));
-        }
-        
-        methodArguments.push({...finishLoginParams.res, code});
-        methodName = loginCompletionHandlerOTP();
-    }
+    let methodName = loginCompletionHandler();
+    let methodArguments = await assembleChallengeCompletionArguments(finishLoginParams, code);
     
     Accounts.callLoginMethod({
         methodName,
@@ -193,8 +190,31 @@ let login = (username, password) => new Promise((resolve, reject) => {
     });
 });
 
+let finishRegisterTOTP = (token, registrationId) => new Promise((resolve, reject) => {
+    Meteor.call(registrationCompletionHandlerTOTP(), {registrationId, token}, err => {
+        if(err) {
+            reject(err);
+        }
+        else {
+            resolve();
+        }
+    });
+});
+
+let registerTOTP = () => new Promise((resolve, reject) => {
+    Meteor.call(registrationChallengeHandlerTOTP(), (err, res) => {
+        if(err) {
+            reject(err);
+        }
+        else {
+            resolve(res);
+        }
+    });
+});
+
 export default {
-    solve,
+    solveChallenge,
+    solveU2FChallenge,
     registerMFA, registerU2F:registerMFA,
     
     finishResetPassword,
@@ -204,4 +224,7 @@ export default {
     finishLogin,
     loginWithMFA,
     login,
+    
+    finishRegisterTOTP,
+    registerTOTP,
 };

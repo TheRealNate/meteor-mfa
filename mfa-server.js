@@ -4,13 +4,14 @@ import { check, Match } from 'meteor/check';
 import { Accounts } from 'meteor/accounts-base';
 import { Random } from 'meteor/random';
 import crypto from 'crypto';
+import { authenticator } from 'otplib';
 
 import { parseLoginRequest, parseRegisterRequest, generateRegistrationChallenge, generateLoginChallenge, verifyAuthenticatorAssertion } from '@webauthn/server';
 
 let MFARegistrations = new Mongo.Collection("mfaregistrations");
 let MFAChallenges = new Mongo.Collection("mfachallenges");
 
-import {resetPasswordChallengeHandler, registrationChallengeHandlerU2F, registerCompletionHandlerU2F, loginChallengeHandler, loginCompletionHandlerU2F, loginCompletionHandlerOTP } from './method-names';
+import {registrationChallengeHandlerTOTP, registrationCompletionHandlerTOTP, loginCompletionHandler, resetPasswordChallengeHandler, registrationChallengeHandlerU2F, registerCompletionHandlerU2F, loginChallengeHandler } from './method-names';
 
 const userQueryValidator = Match.Where(user => {
   check(user, Match.OneOf({id:Match.Optional(String)}, {username:Match.Optional(String)}, {email:Match.Optional(String)}));
@@ -18,11 +19,7 @@ const userQueryValidator = Match.Where(user => {
 });
 
 const generateCode = () => {
-  return Array(...Array(6))
-    .map(() => {
-      return Math.floor(Math.random() * 10);
-    })
-    .join('');
+  return Array(...Array(6)).map(() => {return Math.floor(Math.random() * 10);}).join('');
 };
 
 let publicKeyCredentialSchema = {
@@ -53,6 +50,7 @@ let _defaults = {
     },
     onFailedAssertion:() => {},
     enableU2F:true,
+    enableTOTP:true,
     enableOTP:false,
     onSendOTP:null
 };
@@ -74,7 +72,7 @@ const errors = {
     badMfaRequest:new Meteor.Error(400)
 };
 
-let mfaMethods = ["u2f", "otp"];
+let mfaMethods = ["u2f", "otp", "totp"];
 
 let generateChallenge = function (userId, type, challengeConnectionHash) {
     let user = Meteor.users.findOne({_id:userId}, {fields:{"services.mfapublickey":1, "services.mfaenabled":1, "services.mfamethod":1}});
@@ -94,7 +92,10 @@ let generateChallenge = function (userId, type, challengeConnectionHash) {
         response = {};
         challengeData = {code:generateCode()};
         config.onSendOTP(userId, challengeData.code);
-    }    
+    }
+    if(user.services.mfamethod === "totp") {
+        response = {}, challengeData = {};
+    }
     
     let challengeSecret = Random.secret(50);
     let challengeId = MFAChallenges.insert({
@@ -174,7 +175,98 @@ const createConnectionHash = function (connection) {
     return SHA256(str);
 };
 
+
+const verifyChallenge = function (type, params) {
+    let {challengeId, challengeSecret} = params;
+    check(challengeId, String);
+    check(challengeSecret, String);
+    
+    let challengeConnectionHash = createConnectionHash(this.connection);
+    let challengeObj = MFAChallenges.findOne({_id:challengeId});
+    
+    if(
+        !challengeObj
+        || challengeObj.type !== type
+        || challengeObj.connectionHash !== challengeConnectionHash
+        || challengeObj.challengeSecret !== challengeSecret
+        || challengeObj.expires < new Date()
+    ) {
+        throw new Meteor.Error(404);
+    }
+    
+    let user = Meteor.users.findOne({_id:challengeObj.userId});
+    
+    let loggedIn = false;
+    if(user.services.mfamethod === "u2f") {
+        check(params, {challengeId:String, challengeSecret:String, credentials:publicKeyCredentialSchema});
+        loggedIn = verifyAssertion("login", params);
+    }
+    if(user.services.mfamethod === "otp") {
+        check(params.code, String);
+        loggedIn = challengeObj.code === params.code;
+    }
+    if(user.services.mfamethod === "totp") {
+        check(params.code, String);
+        loggedIn = authenticator.check(params.code, user.services.mfasecret);
+    }
+    
+    if(!loggedIn) {
+        throw new Meteor.Error(403);
+    }
+    
+    return user._id;
+};
+
 Meteor.methods({
+    [registrationChallengeHandlerTOTP()]: async function () {
+        if(!config.enableTOTP) return;
+
+        if(!this.userId) {
+            throw new Meteor.Error(403);
+        }
+        
+        const secret = authenticator.generateSecret();
+
+        let registrationId = MFARegistrations.insert({
+            secret,
+            userId:this.userId,
+            method:"totp"
+        });
+        
+        return {registrationId, secret};
+    },
+    [registrationCompletionHandlerTOTP()]: async function ({registrationId, token}) {
+        if(!config.enableTOTP) return;
+        
+        check(registrationId, String);
+        check(token, String);
+
+        if(!this.userId) {
+            throw new Meteor.Error(403);
+        }
+        
+        let registration = MFARegistrations.findOne({$and:[{userId:this.userId}, {_id:registrationId}]});
+        
+        if(!registration) {
+            throw new Meteor.Error(404);
+        }
+        
+        if(!authenticator.check(token, registration.secret)) {
+            throw new Meteor.Error(403, "Incorrect Token");
+        }
+        
+        Meteor.users.update({_id:this.userId}, {$set:{
+            [config.mfaDetailsField]:({enabled:true, type:"totp"}),
+            "services.mfasecret":registration.secret,
+            "services.mfaenabled":true,
+            "services.mfamethod":"totp"
+        }});        
+        
+        MFARegistrations.remove({_id:registration._id});
+        
+        return 200;
+    },
+
     [registrationChallengeHandlerU2F()]: async function () {
         if(!config.enableU2F) return;
         
@@ -230,8 +322,11 @@ Meteor.methods({
             "services.mfamethod":"u2f"
         }});
         
+        MFARegistrations.remove({_id:registration._id});
+        
         return 200;
     },
+
     [resetPasswordChallengeHandler()]: async function (token) {
         const user = Meteor.users.findOne(
             {"services.password.reset.token": token},
@@ -249,6 +344,7 @@ Meteor.methods({
         let challengeConnectionHash = createConnectionHash(this.connection);
         return generateChallenge(user._id, "resetPassword", challengeConnectionHash);
     },
+
     [loginChallengeHandler()]: async function (username, password) {
         if(typeof(username) === "string") {
             if(username.includes("@")) {
@@ -280,54 +376,18 @@ Meteor.methods({
         let challengeConnectionHash = createConnectionHash(this.connection);
         return generateChallenge(user._id, "login", challengeConnectionHash);
     },
-    [loginCompletionHandlerU2F()]: async function (params) {
-        let {challengeId, challengeSecret, credentials} = params;
-        check(challengeId, String);
-        check(challengeSecret, String);
+    [loginCompletionHandler()]: async function (params) {
+        check(params, Object);
+        check(params.challengeId, String);
+        check(params.challengeSecret, String);
         
-        let challengeObj = MFAChallenges.findOne({_id:challengeId});
-        
-        if(!challengeObj || challengeObj.challengeSecret !== challengeSecret || challengeObj.expires < new Date() || challengeObj.type !== "login" || challengeObj.method !== "u2f") {
-            throw new Meteor.Error(404);
-        }
-        
-        let user = Meteor.users.findOne({_id:challengeObj.userId});
-        
-        const loggedIn = verifyAssertion("login", {challengeId, credentials});
-        
-        let challengeConnectionHash = createConnectionHash(this.connection);
-        if(!loggedIn || challengeObj.connectionHash !== challengeConnectionHash) {
-            throw new Meteor.Error(403);
-        }
+        let userId = verifyChallenge("login", params);
         
         return Accounts._attemptLogin(this, 'login', '', {
           type: 'mfa',
-          userId: user._id,
+          userId,
         });
     },
-    [loginCompletionHandlerOTP()]: function ({challengeId, challengeSecret, code}) {
-        check(challengeId, String);
-        check(challengeSecret, String);
-        check(code, String);
-        
-        let challengeObj = MFAChallenges.findOne({_id:challengeId});
-        
-        if(!challengeObj || challengeObj.challengeSecret !== challengeSecret || challengeObj.expires < new Date() || challengeObj.type !== "login" || challengeObj.method !== "otp") {
-            throw new Meteor.Error(400);
-        }
-        
-        let challengeConnectionHash = createConnectionHash(this.connection);
-        if(challengeObj.code !== code || challengeObj.connectionHash !== challengeConnectionHash) {
-            throw new Meteor.Error(403);
-        }
-        
-        let user = Meteor.users.findOne({_id:challengeObj.userId});
-        
-        return Accounts._attemptLogin(this, 'login', '', {
-          type: 'mfa',
-          userId: user._id,
-        });
-    }
 });
 
 Accounts.validateLoginAttempt(options => {
@@ -347,44 +407,16 @@ Accounts.validateLoginAttempt(options => {
         try {
             check(options.methodArguments[2], Object);
             check(options.methodArguments[2].challengeId, String);
+            check(options.methodArguments[2].challengeSecret, String);
         }
         catch(e) {
             throw errors.mfaRequired;
         }
         
+        let params = options.methodArguments[2];
+        
         try {
-            let challengeObj = MFAChallenges.findOne({_id:options.methodArguments[2].challengeId});
-            
-            let challengeConnectionHash = createConnectionHash(options.connection);
-            if(!challengeObj || challengeObj.type !== "resetPassword" || challengeObj.connectionHash !== challengeConnectionHash) {
-                throw errors.badMfaRequest;
-            }
-            
-            if(options.user.services.mfamethod === "u2f") {
-                check(options.methodArguments[2].credentials, publicKeyCredentialSchema);
-                let isValid = verifyAssertion("resetPassword", options.methodArguments[2]);
-                if(!isValid) {
-                    throw errors.mfaFailed;
-                }
-                else {
-                    return true;
-                }
-            }
-            
-            if(options.user.services.mfamethod === "otp") {
-                check(options.methodArguments[2].code, String);
-                
-                if(challengeObj.method !== "otp") {
-                    throw errors.badMfaRequest;
-                }
-                
-                if(challengeObj.code !== options.methodArguments[2].code) {
-                    throw errors.mfaFailed;
-                }
-                else {
-                    return true;
-                }
-            }
+            verifyChallenge("resetPassword", params);
         }
         catch(e) {
             throw errors.mfaFailed;
@@ -398,4 +430,8 @@ Accounts.validateLoginAttempt(options => {
     return true;
 });
 
-export default { enableOTP, setConfig, setStrings, disableMFA, generateChallenge, verifyAssertion, verifyAttestation:verifyAssertion };
+let getCurrentTOTP = function (secret) {
+    return authenticator.generate(secret);
+};
+
+export default { verifyChallenge, getCurrentTOTP, enableOTP, setConfig, setStrings, disableMFA, generateChallenge, verifyAssertion, verifyAttestation:verifyAssertion };
