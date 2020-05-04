@@ -40,7 +40,9 @@ let publicKeyCredentialSchema = {
 
 let _strings = {
     mfaAlreadyEnabledError:"MFA is already enabled",
-    incorrectPasswordError:"Incorrect Password"
+    incorrectPasswordError:"Incorrect Password",
+    mfaRequiredError:"MFA is required",
+    mfaFailedError:"Failed to authenticate with MFA"
 };
 let _defaults = {
     mfaDetailsField:"mfa",
@@ -64,6 +66,12 @@ let setConfig = function (c) {
 
 let setStrings = function (s) {
     Object.assign(strings, s);
+};
+
+const errors = {
+    mfaRequired:new Meteor.Error("mfa-required", strings.mfaRequiredError),
+    mfaFailed:new Meteor.Error("mfa-failed", strings.mfaFailedError),
+    badMfaRequest:new Meteor.Error(400)
 };
 
 let mfaMethods = ["u2f", "otp"];
@@ -341,7 +349,7 @@ Accounts.validateLoginAttempt(options => {
             check(options.methodArguments[2].challengeId, String);
         }
         catch(e) {
-            throw new Meteor.Error("mfa-required", "MFA verification required");
+            throw errors.mfaRequired;
         }
         
         try {
@@ -349,28 +357,29 @@ Accounts.validateLoginAttempt(options => {
             
             let challengeConnectionHash = createConnectionHash(options.connection);
             if(!challengeObj || challengeObj.type !== "resetPassword" || challengeObj.connectionHash !== challengeConnectionHash) {
-                throw new Meteor.Error(400);
+                throw errors.badMfaRequest;
             }
             
             if(options.user.services.mfamethod === "u2f") {
                 check(options.methodArguments[2].credentials, publicKeyCredentialSchema);
                 let isValid = verifyAssertion("resetPassword", options.methodArguments[2]);
                 if(!isValid) {
-                    throw new Meteor.Error("mfa-error");
+                    throw errors.mfaFailed;
                 }
                 else {
                     return true;
                 }
             }
-            else {
+            
+            if(options.user.services.mfamethod === "otp") {
                 check(options.methodArguments[2].code, String);
                 
                 if(challengeObj.method !== "otp") {
-                    throw new Meteor.Error(400);
+                    throw errors.badMfaRequest;
                 }
                 
                 if(challengeObj.code !== options.methodArguments[2].code) {
-                    throw new Meteor.Error("mfa-error");
+                    throw errors.mfaFailed;
                 }
                 else {
                     return true;
@@ -378,12 +387,12 @@ Accounts.validateLoginAttempt(options => {
             }
         }
         catch(e) {
-            throw new Meteor.Error("mfa-failed", "MFA verification failed");
+            throw errors.mfaFailed;
         }
     }
   
     if(options.user.services.mfaenabled) {
-        throw new Meteor.Error("mfa-required");
+        throw errors.mfaRequired;
     }
   
     return true;
