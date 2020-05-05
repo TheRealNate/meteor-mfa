@@ -21,7 +21,22 @@ If you are interested in contributing on any of these tasks please reach out!
 - Support requiring more then 2 factors to authenticate
 - Passwordless
 
-## Installation/Setup
+<h1>Table of Contents</h2>
+
+- [Getting Started](#installation)
+  - [Universal 2nd Factor (U2F)](#u2f)
+  - [One Time Passwords (OTPs)](#otp)
+  - [Time-Based One Time Passwords (TOTPs)](#totp)
+  - [Logging in a user](#login)
+  - [Retrieving user's MFA status](#retrieving-mfa-status)
+  - [Resetting Passwords with MFA](#reset-password)
+  - [Authenticating in a Meteor method](#method-authentication)
+- [API Docs](#api-docs)
+  - [Client](#client-api)
+  - [Server](#server-api)
+  
+
+<h2 id="installation">Getting Started</h2>
 
 Add the package with `meteor add ndev:mfa`
 
@@ -29,7 +44,7 @@ You can then follow the instructions below for setting up U2F and/or OTP.
 
 *Note that U2F is enabled by default, and OTP is disabled by default*
 
-### Universal 2nd Factor (U2F)
+<h3 id="u2f">Universal 2nd Factor (U2F)</h3>
 
 First, Set required configuration fields on server:
 ````
@@ -54,7 +69,7 @@ MFA.registerU2F().then(r => {
 });
 ````
 
-### One Time Passwords (OTPs)
+<h3 id="otp">One Time Passwords (OTPs)</h3>
 
 One-Time-Passwords are codes typically sent via SMS or Email. This package takes a very simplistic approach to enrollment in order to let you control how the codes get delivered.
 
@@ -96,7 +111,7 @@ MFA.registerTOTP().then(r => {
 });
 ````
 
-### Logging in a user
+<h3 id="login">Logging in a user</h3>
 
 The package provides a method called `MFA.login`. This method will attempt to login the user normally, then if it fails due to mfa being required, runs `MFA.loginWithMFA`. If you prefer, you can customize your implementation by doing your own check to see if MFA exists then, if it does, directly calling `MFA.loginWithMFA`.
 
@@ -137,10 +152,10 @@ MFA.login(username, password).then(({method, finishLoginParams}) => {
 
 You can see a complete login page example [here](/examples/react/Login.jsx)
 
-### Publishing user's MFA status
+<h3 id="retrieving-mfa-status">Retrieving user's MFA status</h3>
 The field specified in `config.mfaDetailsField` (default `mfa`) will contain an object with the properties enabled(Boolean) and type(String). You can publish this property to a user to allow them to check if MFA is enabled.
 
-### Resetting Passwords with MFA
+<h3 id="reset-password">Resetting Passwords with MFA</h3>
 The `config.requireResetPasswordMFA` property defines whether a user must authenticate with MFA to reset their password. This is set to `false` by default.
 
 To reset a password with MFA authentication, use the `MFA.resetPassword` method. The usage of this method is very similar to the usage of `MFA.login`:
@@ -189,9 +204,9 @@ Meteor.methods({
 });
 ````
 
-# Full API Documentation
+<h1 id="api-docs">Full API Documentation</h1>
 
-## Client
+<h2 id="client-api">Client</h2>
 `import MFA from 'meteor/ndev:mfa';`
 
 #### MFA.login(username, password)<promise>
@@ -221,7 +236,7 @@ Resets a password using the password reset token. See "Resetting Passwords with 
 ### MFA.resetPasswordWithMFA(token, newPassword)<promise>
 Like MFA.resetPassword, but will fail if user doesn't have MFA enabled
 
-## Server
+<h2 id="server-api">Server</h2>
 `import MFA from 'meteor/ndev:mfa';`
 
 #### MFA.setConfig(options)
