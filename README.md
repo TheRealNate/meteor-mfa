@@ -22,17 +22,18 @@ If you are interested in contributing on any of these tasks please reach out!
 - Passwordless
 
 <h1>Table of Contents</h2>
-[Getting Started](#installation)
-  [Universal 2nd Factor (U2F)](#u2f)
-  [One Time Passwords (OTPs)](#otp)
-  [Time-Based One Time Passwords (TOTPs)](#totp)
-  [Logging in a user](#login)
-  [Retrieving user's MFA status](#retrieving-mfa-status)
-  [Resetting Passwords with MFA](#reset-password)
-  [Authenticating in a Meteor method](#method-authentication)
-[API Docs](#api-docs)
-  [Client](#client-api)
-  [Server](#server-api)
+
+- [Getting Started](#installation)
+  - [Universal 2nd Factor (U2F)](#u2f)
+  - [One Time Passwords (OTPs)](#otp)
+  - [Time-Based One Time Passwords (TOTPs)](#totp)
+  - [Logging in a user](#login)
+  - [Retrieving user's MFA status](#retrieving-mfa-status)
+  - [Resetting Passwords with MFA](#reset-password)
+  - [Authenticating in a Meteor method](#method-authentication)
+- [API Docs](#api-docs)
+  - [Client](#client-api)
+  - [Server](#server-api)
   
 
 <h2 id="installation">Getting Started</h2>
