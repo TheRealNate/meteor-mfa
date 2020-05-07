@@ -53,7 +53,8 @@ let _defaults = {
     enableTOTP:true,
     enableOTP:false,
     onSendOTP:null,
-    requireResetPasswordMFA:true
+    requireResetPasswordMFA:true,
+    keepChallenges:false
 };
 
 let config = Object.assign({}, _defaults);
@@ -176,6 +177,14 @@ const createConnectionHash = function (connection) {
     return SHA256(str);
 };
 
+const invalidateChallenge = function (challengeId) {
+    if(config.keepChallenges) {
+        MFAChallenges.update({_id:challengeId}, {$set:{used:true}});
+    }
+    else {
+        MFAChallenges.remove({_id:challengeId});
+    }
+};
 
 const verifyChallenge = function (type, params) {
     let {challengeId, challengeSecret} = params;
@@ -191,6 +200,7 @@ const verifyChallenge = function (type, params) {
         || challengeObj.connectionHash !== challengeConnectionHash
         || challengeObj.challengeSecret !== challengeSecret
         || challengeObj.expires < new Date()
+        || challengeObj.used === true
     ) {
         throw new Meteor.Error(404);
     }
@@ -215,6 +225,8 @@ const verifyChallenge = function (type, params) {
         throw new Meteor.Error(403);
     }
     
+    invalidateChallenge(challengeId);
+
     return user._id;
 };
 

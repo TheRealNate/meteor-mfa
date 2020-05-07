@@ -276,3 +276,5 @@ Verifies the solvedChallenge (created by `MFA.solveChallenge` on client).
 **enforceMatchingClientAddress *Boolean* (default: true)** Enforce that the client address (IP) that finishes a login challenge is the same as the one that creates it
 
 **enforceMatchingUserAgent *Boolean* (default: true)** Enforce that the user agent that finishes a login challenge is the same as the one that creates it
+
+**keepChallenges *Boolean* (default: false)** Defines whether challenges should be maintained in the database. When set to false, challenges are deleted after use. When set to true, challenges are marked as invalid, but remain in database.
