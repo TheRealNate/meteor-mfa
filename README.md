@@ -11,9 +11,10 @@ This package also supports OTPs (codes delivered via SMS, email, etc).
 #### Known Issues
 - Password Resets that fail MFA authentication will still expire token (e.g. if used has a typo in their code they will require a new token)
 
-#### Roadmap
+#### Roadmap/To-Do
 If you are interested in contributing on any of these tasks please reach out!
 
+- Add rate limiting
 - Create `meteor-react-native` companion package
 - Implement Automated Testing
 - Support Recovery Keys (Keys generated at time of setting up MFA which can be used when no other method is available)
