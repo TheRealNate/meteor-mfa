@@ -7,11 +7,11 @@ import crypto from 'crypto';
 import { authenticator } from 'otplib';
 
 import { parseLoginRequest, parseRegisterRequest, generateRegistrationChallenge, generateLoginChallenge, verifyAuthenticatorAssertion } from '@webauthn/server';
+import {authorizeActionChallengeHandler, authorizeActionCompletionHandler, resetPasswordCheckMFARequired, registrationChallengeHandlerTOTP, registrationCompletionHandlerTOTP, loginCompletionHandler, resetPasswordChallengeHandler, registrationChallengeHandlerU2F, registerCompletionHandlerU2F, loginChallengeHandler } from './method-names';
 
 let MFARegistrations = new Mongo.Collection("mfaregistrations");
 let MFAChallenges = new Mongo.Collection("mfachallenges");
-
-import {resetPasswordCheckMFARequired, registrationChallengeHandlerTOTP, registrationCompletionHandlerTOTP, loginCompletionHandler, resetPasswordChallengeHandler, registrationChallengeHandlerU2F, registerCompletionHandlerU2F, loginChallengeHandler } from './method-names';
+let MFAAuthorizations = new Mongo.Collection("mfaauthorizations");
 
 const userQueryValidator = Match.Where(user => {
   check(user, Match.OneOf({id:Match.Optional(String)}, {username:Match.Optional(String)}, {email:Match.Optional(String)}));
@@ -33,6 +33,12 @@ let publicKeyCredentialSchema = {
         clientDataJSON:String
     },
     getClientExtensionResults:Match.Optional({})
+};
+
+let solvedU2FChallengeSchema = {
+    challengeId:String,
+    challengeSecret:String,
+    credentials:publicKeyCredentialSchema
 };
 
 let _strings = {
@@ -74,6 +80,14 @@ const errors = {
 };
 
 let mfaMethods = ["u2f", "otp", "totp"];
+
+let isExpired = function (expiryDate) {
+    if(!expiryDate instanceof Date) {
+        throw new Error("Expiry date is not a Date");
+    }
+        
+    return new Date() >= expiryDate;
+};
 
 let generateChallenge = function (userId, type, challengeConnectionHash) {
     let user = Meteor.users.findOne({_id:userId}, {fields:{"services.mfapublickey":1, "services.mfaenabled":1, "services.mfamethod":1}});
@@ -176,6 +190,17 @@ const createConnectionHash = function (connection) {
     return SHA256(str);
 };
 
+let u2fAuthorizationIsValid = function (authorization) {
+    return authorization instanceof Object && !authorization.used && !isExpired(authorization.expires) && authorization.authenticated === true;
+};
+
+let invalidateU2FAuthorization = function (authorizationId) {
+    MFAAuthorizations.update({_id:authorizationId}, {$set:{
+        used:true,
+        authenticated:false,
+        useDate:new Date()
+    }});
+};
 
 const verifyChallenge = function (type, params) {
     let {challengeId, challengeSecret} = params;
@@ -199,8 +224,18 @@ const verifyChallenge = function (type, params) {
     
     let loggedIn = false;
     if(user.services.mfamethod === "u2f") {
-        check(params, {challengeId:String, challengeSecret:String, credentials:publicKeyCredentialSchema});
-        loggedIn = verifyAssertion(type, params);
+        if(typeof(params.U2FAuthorizationCode) === "string") {
+            check(params, {challengeId:String, challengeSecret:String, U2FAuthorizationCode:String});
+            let authorization = MFAAuthorizations.findOne({$and:[{action:type}, {userId:user._id}, {code:params.U2FAuthorizationCode}]});
+            loggedIn = u2fAuthorizationIsValid(authorization);
+            if(loggedIn) {
+                invalidateU2FAuthorization(authorization._id);
+            }
+        }
+        else {
+            check(params, {challengeId:String, challengeSecret:String, credentials:publicKeyCredentialSchema});
+            loggedIn = verifyAssertion(type, params);
+        }
     }
     if(user.services.mfamethod === "otp") {
         check(params.code, String);
@@ -406,6 +441,58 @@ Meteor.methods({
           userId,
         });
     },
+    [authorizeActionChallengeHandler()]: async function (type) {
+        check(type, String);
+        
+        if(type === "resetPassword") {
+            throw new Meteor.Error(400, "Type resetPassword is not supported");
+        }
+        
+        let user = Meteor.user();
+        
+        if(!user) {
+            throw new Meteor.Error(404);
+        }
+        
+        if(!user.services.mfaenabled) {
+            throw new Meteor.Error(400);
+        }
+        
+        if(user.services.mfamethod !== "u2f") {
+            throw new Meteor.Error(400, "This method is only supported for accounts with u2f MFA");
+        }
+        
+        let challengeConnectionHash = createConnectionHash(this.connection);
+        let authorizationId = MFAAuthorizations.insert({
+            action:type,
+            userId:this.userId,
+            authenticated:false,
+            expires:new Date(new Date().valueOf() + 1000 * 60 * 10)
+        });
+        
+        return {authorizationId, challenge:generateChallenge(user._id, ("authorize:" + authorizationId), challengeConnectionHash)}; 
+    },
+    [authorizeActionCompletionHandler()]: async function (authorizationId, solvedU2FChallenge) {
+        check(authorizationId, String);
+        check(solvedU2FChallenge, solvedU2FChallengeSchema);
+        
+        let authorization = MFAAuthorizations.findOne({_id:authorizationId});
+        
+        if(!this.userId || !authorization || isExpired(authorization.expires) || authorization.userId !== this.userId) {
+            throw new Meteor.Error(400);
+        }
+        
+        verifyChallenge(("authorize:" + authorizationId), solvedU2FChallenge);
+        
+        let code = generateCode();
+        
+        MFAAuthorizations.update({_id:authorizationId}, {$set:{
+            authenticated:true,
+            code
+        }});
+        
+        return {code};
+    }
 });
 
 Accounts.validateLoginAttempt(options => {

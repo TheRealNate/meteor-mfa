@@ -9,3 +9,5 @@ export let registrationChallengeHandlerTOTP = () => "registrationChallengeHandle
 export let registrationCompletionHandlerTOTP = () => "registrationCompletionHandlerTOTP";
 export let loginCompletionHandler = () => "loginCompletionHandler";
 export let resetPasswordCheckMFARequired = () => "resetPasswordCheckMFARequired";
+export let authorizeActionChallengeHandler = () => "authorizeActionChallengeHandler";
+export let authorizeActionCompletionHandler = () => "authorizeActionCompletionHandler";

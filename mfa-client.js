@@ -2,7 +2,7 @@ import { Meteor } from 'meteor/meteor';
 import { Accounts } from 'meteor/accounts-base';
 import { solveRegistrationChallenge, solveLoginChallenge } from '@webauthn/client';
 
-import {resetPasswordCheckMFARequired, registrationChallengeHandlerTOTP, registrationCompletionHandlerTOTP, resetPasswordChallengeHandler, registrationChallengeHandlerU2F, registerCompletionHandlerU2F, loginChallengeHandler, loginCompletionHandler } from './method-names';
+import {authorizeActionChallengeHandler, authorizeActionCompletionHandler, resetPasswordCheckMFARequired, registrationChallengeHandlerTOTP, registrationCompletionHandlerTOTP, resetPasswordChallengeHandler, registrationChallengeHandlerU2F, registerCompletionHandlerU2F, loginChallengeHandler, loginCompletionHandler } from './method-names';
 
 let solveU2FChallenge = async function (c) {
     let {challengeId, challengeSecret, assertionChallenge} = c;
@@ -49,12 +49,36 @@ let registerMFA = () => new Promise((resolve, reject) => {
     });
 });
 
+let useU2FAuthorizationCode = function (code) {
+    if(typeof(code) !== "string" || code.length !== 6) {
+        throw new Error("Invalid Code");
+    }
+    
+    return {U2FAuthorizationCode:code};
+};
+
+let supportsU2FLogin = function () {
+    return (window.navigator.credentials.get instanceof Function);
+};
+
 let assembleChallengeCompletionArguments = async function (finishLoginParams, code) {
     let {res} = finishLoginParams;
     let methodArguments = [];
     
     if(res.method === "u2f") {
-        let assertion = await solveU2FChallenge(res);
+        let assertion;
+        if(code && code.U2FAuthorizationCode) {
+            /*
+                We require that the MFA.useU2FAuthorizationCode method is used
+                even though we just pull the code out to make sure the code isn't
+                actually an OTP due to a coding error.
+            */
+            let {challengeId, challengeSecret} = finishLoginParams.res;
+            assertion = {challengeId, challengeSecret, ...code};
+        }
+        else {
+            assertion = await solveU2FChallenge(res);
+        }
         methodArguments.push(assertion);
     }
 
@@ -170,8 +194,9 @@ let loginWithMFA = (username, password) => new Promise((resolve, reject) => {
         }
         
         let finishLoginParams = {res, _type:"login"};
+        let supportsU2FLogin = supportsU2FLogin();
         
-        resolve({method:res.method, finishLoginParams, finishParams:finishLoginParams});
+        resolve({supportsU2FLogin, method:res.method, finishLoginParams, finishParams:finishLoginParams});
     });
 });
 
@@ -213,7 +238,30 @@ let registerTOTP = () => new Promise((resolve, reject) => {
     });
 });
 
+
+let authorizeAction = (type) => new Promise((resolve, reject) => {
+    Meteor.call(authorizeActionChallengeHandler(), type, async (err, res) => {
+        if(err) {
+            return reject(err);
+        }
+        
+        let solvedChallenge = await solveU2FChallenge(res.challenge);
+        
+        Meteor.call(authorizeActionCompletionHandler(), res.authorizationId, solvedChallenge, async(err, res) => {
+            if(err) {
+                return reject(err);
+            }
+            
+            resolve(res.code);
+        });
+    });    
+});
+
 export default {
+    authorizeAction,
+    useU2FAuthorizationCode,
+    
+    
     solveChallenge,
     solveU2FChallenge,
     registerMFA, registerU2F:registerMFA,

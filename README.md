@@ -31,6 +31,7 @@ If you are interested in contributing on any of these tasks please reach out!
   - [Retrieving user's MFA status](#retrieving-mfa-status)
   - [Resetting Passwords with MFA](#reset-password)
   - [Authenticating in a Meteor method](#method-authentication)
+  - [Authorizing Another Device (U2F MFA on devices without U2F)](#authorizing)
 - [API Docs](#api-docs)
   - [Client](#client-api)
   - [Server](#server-api)
@@ -144,9 +145,7 @@ MFA.login(username, password).then(({method, finishLoginParams}) => {
     MFA.finishLogin(finishLoginParams, code);
   }
 }).catch(err => {
-  if(err) {
-    alert(err.message);
-  }
+  alert(err.message);
 });
 ````
 
@@ -203,6 +202,66 @@ Meteor.methods({
   }  
 });
 ````
+
+<h3 id="authorizing">Authorizing Another Device (U2F MFA on devices without U2F)</h3>
+
+U2F authentication is the most secure option. However, there are a lot of devices and platforms that are incompatible with it (React Native, for example).
+
+This package exposes the MFA.authorizeAction method on the client to solve this. The MFA.authorizeAction function triggers U2F authentication, then creates a one-time-code which can be used in place of a solved challenge for any other method.
+
+This one-time-code can then be passed to a different device to allow it to do something that requires U2F authentication.
+
+**The `MFA.authorizeAction` method can only be used for accounts with U2F mfa.**
+
+Here is how you generate the one-time-code:
+````
+MFA.authorizeAction(type).then(code => { // Type should refer to the action. If the one-time-code is for logging in, it should be "login"
+  // Display the code in the UI
+}).reject(e => {
+  alert(e.reason);
+});
+````
+
+On the other device, you collect the code and wrap it with the `MFA.useU2FAuthorizationCode(code)` method.
+
+````
+MFA.loginWithMFA(username, password).then((r) => {
+  if(r.method === "u2f") {
+    let code = prompt("Please enter your authorization code generated from another device"); // As always, you should never use prompt, this is just an example
+    MFA.finishLogin(r.finishLoginParams, MFA.useU2FAuthorizationCode(code)).then(/*...*/)
+  }
+}).catch(/*...*/);
+````
+
+In order to design your login flows better, the package exposes the method `MFA.supportsU2FLogin()`. This attempts to detect whether the browser will support a u2f login. As a convenience, this value is also passed in the resolution of `MFA.login` or `MFA.loginWithMFA`. If the value is false, show the user instructions to generate a code on another device along with an input for them to enter the code.
+
+Here is a complete login example:
+````
+import MFA from 'meteor/ndev:mfa';
+
+MFA.login(username, password).then(({method, finishLoginParams, supportsU2FLogin}) => {
+  if(method === "u2f") {
+    if(supportsU2FLogin) {
+      // For U2F, you don't really need to make any changes to your UI since the pop-up will appear immediately, but you can do-so here if you wish
+      MFA.finishLogin(finishLoginParams);
+    }
+    else {
+      let code = prompt("Enter the code generated from your other device");
+      MFA.finishLogin(finishLoginParams, MFA.useU2FAuthorizationCode(code));
+    }
+  }
+  else {
+    let code = prompt("What is the OTP?"); 
+    MFA.finishLogin(finishLoginParams, code);
+  }
+}).catch(err => {
+  // There was an error in the first stage of login, likely a "user not found" or "incorrect password"
+  alert(err.reason);
+});
+````
+As always, prompt is used as an example. After `MFA.login` resolved, unless the method is u2f and u2f login is supported, you should save finishLoginParams, collect the code in your UI, then continue with MFA.finishLogin.
+
+For situations where you are not logging in (like in the "Authenticating in a Meteor method" section above), you can use `MFA.useU2FAuthorizationCode(code)` in place of `MFA.solveChallenge()`.
 
 <h1 id="api-docs">Full API Documentation</h1>
 
