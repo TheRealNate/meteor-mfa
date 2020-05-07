@@ -61,7 +61,8 @@ let _defaults = {
     onSendOTP:null,
     requireResetPasswordMFA:true,
     allowU2FAuthorization:true,
-    authorizationDisabledMethods:[]
+    authorizationDisabledMethods:[],
+    keepChallenges:false
 };
 
 let config = Object.assign({}, _defaults);
@@ -203,6 +204,14 @@ let invalidateU2FAuthorization = function (authorizationId) {
         authenticated:false,
         useDate:new Date()
     }});
+
+const invalidateChallenge = function (challengeId) {
+    if(config.keepChallenges) {
+        MFAChallenges.update({_id:challengeId}, {$set:{used:true}});
+    }
+    else {
+        MFAChallenges.remove({_id:challengeId});
+    }
 };
 
 const verifyChallenge = function (type, params) {
@@ -219,7 +228,7 @@ const verifyChallenge = function (type, params) {
         || challengeObj.connectionHash !== challengeConnectionHash
         || challengeObj.challengeSecret !== challengeSecret
         || challengeObj.expires < new Date()
-        || (challengeObj.used !== false)
+        || challengeObj.used === true
     ) {
         throw new Meteor.Error(404);
     }
@@ -253,9 +262,9 @@ const verifyChallenge = function (type, params) {
     if(!loggedIn) {
         throw new Meteor.Error(403);
     }
-    
-    MFAChallenges.update({_id:challengeId}, {$set:{used:true}});
-    
+        
+    invalidateChallenge(challengeId);
+
     return user._id;
 };
 
