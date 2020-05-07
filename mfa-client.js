@@ -260,7 +260,7 @@ let authorizeAction = (type) => new Promise((resolve, reject) => {
 export default {
     authorizeAction,
     useU2FAuthorizationCode,
-    
+    supportsU2FLogin,
     
     solveChallenge,
     solveU2FChallenge,

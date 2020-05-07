@@ -59,7 +59,9 @@ let _defaults = {
     enableTOTP:true,
     enableOTP:false,
     onSendOTP:null,
-    requireResetPasswordMFA:true
+    requireResetPasswordMFA:true,
+    allowU2FAuthorization:true,
+    authorizationDisabledMethods:[]
 };
 
 let config = Object.assign({}, _defaults);
@@ -120,6 +122,7 @@ let generateChallenge = function (userId, type, challengeConnectionHash) {
         method:user.services.mfamethod,
         connectionHash:challengeConnectionHash,
         challengeSecret,
+        used:false,
         ...challengeData
     });
     
@@ -216,6 +219,7 @@ const verifyChallenge = function (type, params) {
         || challengeObj.connectionHash !== challengeConnectionHash
         || challengeObj.challengeSecret !== challengeSecret
         || challengeObj.expires < new Date()
+        || (challengeObj.used !== false)
     ) {
         throw new Meteor.Error(404);
     }
@@ -249,6 +253,8 @@ const verifyChallenge = function (type, params) {
     if(!loggedIn) {
         throw new Meteor.Error(403);
     }
+    
+    MFAChallenges.update({_id:challengeId}, {$set:{used:true}});
     
     return user._id;
 };
@@ -442,6 +448,12 @@ Meteor.methods({
         });
     },
     [authorizeActionChallengeHandler()]: async function (type) {
+        if(!config.allowU2FAuthorization) {return;}
+        
+        if(config.authorizationDisabledMethods.includes(type)) {
+            throw new Meteor.Error(400, "This method cannot be authorized by one-time-code");
+        }
+        
         check(type, String);
         
         if(type === "resetPassword") {
@@ -473,6 +485,8 @@ Meteor.methods({
         return {authorizationId, challenge:generateChallenge(user._id, ("authorize:" + authorizationId), challengeConnectionHash)}; 
     },
     [authorizeActionCompletionHandler()]: async function (authorizationId, solvedU2FChallenge) {
+        if(!config.allowU2FAuthorization) {return;}
+        
         check(authorizationId, String);
         check(solvedU2FChallenge, solvedU2FChallengeSchema);
         
