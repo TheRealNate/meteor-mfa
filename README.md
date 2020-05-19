@@ -168,7 +168,7 @@ MFA.resetPassword(token, newPassword).then(r => {
   else {
     if(method === "u2f") {
       // For U2F, you don't really need to make any changes to your UI since the pop-up will appear immediately, but you can do-so here if you wish
-      MFA.finishLogin(finishLoginParams);
+      MFA.finishResetPassword(finishLoginParams);
     }
     else {
       // You can save the finishLoginParams, collect the code in your UI, then call MFA.finishLogin
