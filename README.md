@@ -14,13 +14,13 @@ This package also supports OTPs (codes delivered via SMS, email, etc).
 #### Roadmap/To-Do
 If you are interested in contributing on any of these tasks please reach out!
 
+- Passwordless (There is now a [release candidate](https://github.com/TheRealNate/meteor-mfa/releases/tag/v0.0.12-rc) for passwordless, if you'd like to check it out)
 - Add rate limiting
 - Create `meteor-react-native` companion package
 - Implement Automated Testing
 - Support Recovery Keys (Keys generated at time of setting up MFA which can be used when no other method is available)
 - Add "Login other device" support: generate an OTP from a device capable of using U2F to be entered on a device not capable of U2F
 - Support requiring more then 2 factors to authenticate
-- Passwordless
 
 <h1>Table of Contents</h2>
 
