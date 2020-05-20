@@ -204,6 +204,7 @@ let invalidateU2FAuthorization = function (authorizationId) {
         authenticated:false,
         useDate:new Date()
     }});
+}
 
 const invalidateChallenge = function (challengeId) {
     if(config.keepChallenges) {
