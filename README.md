@@ -269,17 +269,24 @@ For situations where you are not logging in (like in the "Authenticating in a Me
 <h2 id="client-api">Client</h2>
 `import MFA from 'meteor/ndev:mfa';`
 
-#### MFA.login(username, password)<promise>
+#### MFA.login(email/username, password)<promise>
 Resolves when logged in, catches on error. This function is a wrapper for the `MFA.loginWithMFA` function. It attempts to login the user. If it receives an `mfa-required` error, it uses `MFA.loginWithMFA`. If you prefer to customize this, you can use the `MFA.loginWithMFA` function
 
-#### MFA.loginWithMFA(username, password)<promise>
+#### MFA.loginWithMFA(email/username, password)<promise>
 Requests a login challenge, solves it, then logs in. This function will fail if the user doesn't have MFA enabled.
+
+#### MFA.loginWithPasswordless(email/username)<promise:(passwordNeeded)>
+Attempts a passwordless login. Resolves with a single boolean `passwordNeeded`. If true, the user doesn't have passwordless turned on, so you must use the regular login flow. If false, the user is now logged in.
 
 #### MFA.finishLogin(finishLoginParams)<promise>
 Completes a login
 
-#### MFA.registerU2F()<promise>
-Registers the user's U2F device and enables MFA
+#### MFA.registerU2F(params)<promise>
+Registers the user's U2F device and enables MFA. To just enable MFA, call without any arguments. To enable MFA and passwordless, call with the following params:
+
+````
+{passwordless:true, password:"..."}
+````
 
 #### MFA.registerTOTP()<promise>
 Generates a TOTP secret and a registrationId. Resolves with `{secret, registrationId}`.
@@ -312,7 +319,10 @@ Returns a boolean of whether the device supports u2f login
 See the config options section below
 
 #### MFA.disableMFA(userId)
-Disables MFA for a user. This is an internal method. If you'd like the user to authenticate before you disable, see [Authenticating in a Method](#method-authentication).
+Disables MFA for a user. This is an internal method. If you'd like the user to authenticate before you disable, see [Authenticating in a Method](#method-authentication). Note: if the user has passwordless enabled, this will also disable passwordless.
+
+#### MFA.disablePasswordless(userId)
+Disables passwordless for a user. When this method is called, MFA will remain enabled. To disable passwordless and MFA, call `MFA.disableMFA`.
 
 #### MFA.generateChallenge(userId, type)
 Generates a challenge. This is then sent to the client and passed into `MFA.solveChallenge()`
