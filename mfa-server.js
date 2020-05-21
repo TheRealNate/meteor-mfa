@@ -467,7 +467,7 @@ Meteor.methods({
                 check(config.passwordless, true);
             }
             catch(e) {
-                throw new Meteor.Error("not-passwordles", "Not Passwordless");
+                throw new Meteor.Error("not-passwordless", "Not Passwordless");
             }
         }
         else {
