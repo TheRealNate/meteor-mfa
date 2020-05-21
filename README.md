@@ -1,6 +1,4 @@
-Multi-Factor Authentication for Meteor, supporting U2F hardware keys as well as OTPs.
-
-This package is still in development and may contain issues. We'd appreciate you reviewing the code and creating any issue if you see any.
+Multi-Factor Authentication and U2F Passwordless for Meteor, supporting U2F hardware keys as well as OTPs.
 
 #### What is U2F?
 
@@ -20,7 +18,6 @@ If you are interested in contributing on any of these tasks please reach out!
 - Support Recovery Keys (Keys generated at time of setting up MFA which can be used when no other method is available)
 - Add "Login other device" support: generate an OTP from a device capable of using U2F to be entered on a device not capable of U2F
 - Support requiring more then 2 factors to authenticate
-- Passwordless
 
 <h1>Table of Contents</h2>
 
@@ -31,8 +28,9 @@ If you are interested in contributing on any of these tasks please reach out!
   - [Logging in a user](#login)
   - [Retrieving user's MFA status](#retrieving-mfa-status)
   - [Resetting Passwords with MFA](#reset-password)
-  - [Authenticating in a Meteor method](#method-authentication)
+  - [Authenticating in a Meteor method](#method-authentication)  
   - [Authorizing Another Device (U2F MFA on devices without U2F)](#authorizing)
+  - [Passwordless](#passwordless)  
 - [API Docs](#api-docs)
   - [Client](#client-api)
   - [Server](#server-api)
@@ -264,17 +262,17 @@ As always, prompt is used as an example. After `MFA.login` resolved, unless the 
 
 For situations where you are not logging in (like in the "Authenticating in a Meteor method" section above), you can use `MFA.useU2FAuthorizationCode(code)` in place of `MFA.solveChallenge()`.
 
-<h3 id="passwordless">Passwordless *(Removing the weakest link)*</h3>
+<h3 id="passwordless">Passwordless</h3>
 
-Passwordless is really straightforward. No passwords. Instead, physical security keys. 
+Passwords are widely regarded as the "weakest link" when it comes to security. Passwordless is really straightforward. No passwords. Instead, physical security keys.  This concept is being promoted by Microsoft, the FIDO Alliance (a consortium consisting of PayPal, Google, etc), and more giant tech companies.
 
-Passwordless is a concept being promoted by Microsoft, the FIDO Alliance (a consortium consisting of PayPal, Google, etc), and more. Use of passwordless is expanding rapidly. For example, U2F security keys can now be used to login to Windows 10 instead of passwords.
+This package only supports passwordless login using U2F security keys. It does *not* support passwordless using OTPs or TOTPs. 
 
-This package enables passwordless login in a straightforward way. It is also flexible, you can have some users on passwordless, some users on MFA, and some users without either.
+This package enables passwordless login in a straightforward way. It is also flexible. You can have some users on passwordless, some users on MFA, and some users without either.
 
 **1. Enable passwordless in config**
 
-On the server, set `config.passwordless` to `true`:
+Passwordless is disabled by default. On the server, set `config.passwordless` to `true`:
 
 ````
 MFA.setConfig({passwordless:true});
