@@ -264,6 +264,51 @@ As always, prompt is used as an example. After `MFA.login` resolved, unless the 
 
 For situations where you are not logging in (like in the "Authenticating in a Meteor method" section above), you can use `MFA.useU2FAuthorizationCode(code)` in place of `MFA.solveChallenge()`.
 
+<h3 id="passwordless">Passwordless *(Removing the weakest link)*</h3>
+
+Passwordless is really straightforward. No passwords. Instead, physical security keys. 
+
+Passwordless is a concept being promoted by Microsoft, the FIDO Alliance (a consortium consisting of PayPal, Google, etc), and more. Use of passwordless is expanding rapidly. For example, U2F security keys can now be used to login to Windows 10 instead of passwords.
+
+This package enables passwordless login in a straightforward way. It is also flexible, you can have some users on passwordless, some users on MFA, and some users without either.
+
+**1. Enable passwordless in config**
+
+On the server, set `config.passwordless` to `true`:
+
+````
+MFA.setConfig({passwordless:true});
+````
+
+**2. Register the user's U2F key:**
+
+To enable passwordless for a user, call `MFA.registerU2F` on the client with the following options:
+
+````
+MFA.registerU2F({passwordless:true, password:"user's current password here"}).then(() => {
+  // All done!
+}).catch(e => {
+  // User cancelled U2F verification, incorrect password, etc
+})
+````
+
+**3. Login with passwordless:**
+
+On the client:
+
+````
+MFA.loginWithPasswordless("email or username here").then(() => {
+  // Passwordless login successfull
+}).catch(e => {
+  // Passwordless not enabled, user cancelled U2F verification, etc
+});
+````
+
+There are many ways to design your login flow. Here are some examples:
+- Add a "Login with Security Key" button to your login page, and when clicked, collect their username/email and trigger `MFA.loginWithPasswordless`
+- On your login form, only ask for email/username initially, then immediately attempt MFA.loginWithPasswordless. If it fails (due to passwordless not being enabled), then collect the password
+
+
 <h1 id="api-docs">Full API Documentation</h1>
 
 <h2 id="client-api">Client</h2>
