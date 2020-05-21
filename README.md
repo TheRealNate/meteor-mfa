@@ -294,13 +294,18 @@ MFA.registerU2F({passwordless:true, password:"user's current password here"}).th
 
 **3. Login with passwordless:**
 
-On the client:
+On the client, call `MFA.loginWithPasswordless`. This method will catch only due to an error with U2F. If the user does not have passwordless enabled, it will resolve with `passwordRequired` as `true`:
 
 ````
-MFA.loginWithPasswordless("email or username here").then(() => {
-  // Passwordless login successfull
+MFA.loginWithPasswordless("email or username here").then(passwordRequired => {
+  if(passwordRequired) {
+    // User doesn't have passwordless enabled. Show regular login form.
+  }
+  else {
+    // Passwordless login successfull
+  }
 }).catch(e => {
-  // Passwordless not enabled, user cancelled U2F verification, etc
+  // user cancelled U2F verification, etc
 });
 ````
 
