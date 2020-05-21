@@ -1,4 +1,4 @@
-Multi-Factor Authentication and U2F Passwordless for Meteor, supporting U2F hardware keys as well as OTPs.
+Multi-Factor Authentication and Passwordless for Meteor, supporting U2F hardware keys as well as OTPs.
 
 #### What is U2F?
 
