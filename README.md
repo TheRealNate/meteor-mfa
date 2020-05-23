@@ -1,6 +1,4 @@
-Multi-Factor Authentication for Meteor, supporting U2F hardware keys as well as OTPs.
-
-This package is still in development and may contain issues. We'd appreciate you reviewing the code and creating any issue if you see any.
+Multi-Factor Authentication and Passwordless for Meteor, supporting U2F hardware keys as well as OTPs.
 
 #### What is U2F?
 
@@ -31,8 +29,9 @@ If you are interested in contributing on any of these tasks please reach out!
   - [Logging in a user](#login)
   - [Retrieving user's MFA status](#retrieving-mfa-status)
   - [Resetting Passwords with MFA](#reset-password)
-  - [Authenticating in a Meteor method](#method-authentication)
+  - [Authenticating in a Meteor method](#method-authentication)  
   - [Authorizing Another Device (U2F MFA on devices without U2F)](#authorizing)
+  - [Passwordless](#passwordless)  
 - [API Docs](#api-docs)
   - [Client](#client-api)
   - [Server](#server-api)
@@ -264,22 +263,79 @@ As always, prompt is used as an example. After `MFA.login` resolved, unless the 
 
 For situations where you are not logging in (like in the "Authenticating in a Meteor method" section above), you can use `MFA.useU2FAuthorizationCode(code)` in place of `MFA.solveChallenge()`.
 
+<h3 id="passwordless">Passwordless</h3>
+
+Passwords are widely regarded as the "weakest link" when it comes to security. Passwordless is really straightforward. No passwords. Instead, physical security keys.  This concept is being promoted by Microsoft, the FIDO Alliance (a consortium consisting of PayPal, Google, etc), and more giant tech companies.
+
+This package only supports passwordless login using U2F security keys. It does *not* support passwordless using OTPs or TOTPs. 
+
+This package enables passwordless login in a straightforward way. It is also flexible. You can have some users on passwordless, some users on MFA, and some users without either.
+
+**1. Enable passwordless in config**
+
+Passwordless is disabled by default. On the server, set `config.passwordless` to `true`:
+
+````
+MFA.setConfig({passwordless:true});
+````
+
+**2. Register the user's U2F key:**
+
+To enable passwordless for a user, call `MFA.registerU2F` on the client with the following options:
+
+````
+MFA.registerU2F({passwordless:true, password:"user's current password here"}).then(() => {
+  // All done!
+}).catch(e => {
+  // User cancelled U2F verification, incorrect password, etc
+})
+````
+
+**3. Login with passwordless:**
+
+On the client, call `MFA.loginWithPasswordless`. This method will catch only due to an error with U2F. If the user does not have passwordless enabled, it will resolve with `passwordRequired` as `true`:
+
+````
+MFA.loginWithPasswordless("email or username here").then(passwordRequired => {
+  if(passwordRequired) {
+    // User doesn't have passwordless enabled. Show regular login form.
+  }
+  else {
+    // Passwordless login successfull
+  }
+}).catch(e => {
+  // user cancelled U2F verification, etc
+});
+````
+
+There are many ways to design your login flow. Here are some examples:
+- Add a "Login with Security Key" button to your login page, and when clicked, collect their username/email and trigger `MFA.loginWithPasswordless`
+- On your login form, only ask for email/username initially, then immediately attempt MFA.loginWithPasswordless. If it fails (due to passwordless not being enabled), then collect the password
+
+
 <h1 id="api-docs">Full API Documentation</h1>
 
 <h2 id="client-api">Client</h2>
 `import MFA from 'meteor/ndev:mfa';`
 
-#### MFA.login(username, password)<promise>
+#### MFA.login(email/username, password)<promise>
 Resolves when logged in, catches on error. This function is a wrapper for the `MFA.loginWithMFA` function. It attempts to login the user. If it receives an `mfa-required` error, it uses `MFA.loginWithMFA`. If you prefer to customize this, you can use the `MFA.loginWithMFA` function
 
-#### MFA.loginWithMFA(username, password)<promise>
+#### MFA.loginWithMFA(email/username, password)<promise>
 Requests a login challenge, solves it, then logs in. This function will fail if the user doesn't have MFA enabled.
+
+#### MFA.loginWithPasswordless(email/username)<promise:(passwordNeeded)>
+Attempts a passwordless login. Resolves with a single boolean `passwordNeeded`. If true, the user doesn't have passwordless turned on, so you must use the regular login flow. If false, the user is now logged in.
 
 #### MFA.finishLogin(finishLoginParams)<promise>
 Completes a login
 
-#### MFA.registerU2F()<promise>
-Registers the user's U2F device and enables MFA
+#### MFA.registerU2F(params)<promise>
+Registers the user's U2F device and enables MFA. To just enable MFA, call without any arguments. To enable MFA and passwordless, call with the following params:
+
+````
+{passwordless:true, password:"..."}
+````
 
 #### MFA.registerTOTP()<promise>
 Generates a TOTP secret and a registrationId. Resolves with `{secret, registrationId}`.
@@ -312,7 +368,10 @@ Returns a boolean of whether the device supports u2f login
 See the config options section below
 
 #### MFA.disableMFA(userId)
-Disables MFA for a user. This is an internal method. If you'd like the user to authenticate before you disable, see [Authenticating in a Method](#method-authentication).
+Disables MFA for a user. This is an internal method. If you'd like the user to authenticate before you disable, see [Authenticating in a Method](#method-authentication). Note: if the user has passwordless enabled, this will also disable passwordless.
+
+#### MFA.disablePasswordless(userId)
+Disables passwordless for a user. When this method is called, MFA will remain enabled. To disable passwordless and MFA, call `MFA.disableMFA`.
 
 #### MFA.generateChallenge(userId, type)
 Generates a challenge. This is then sent to the client and passed into `MFA.solveChallenge()`

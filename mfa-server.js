@@ -62,7 +62,8 @@ let _defaults = {
     requireResetPasswordMFA:true,
     allowU2FAuthorization:true,
     authorizationDisabledMethods:[],
-    keepChallenges:false
+    keepChallenges:false,
+    passwordless:false
 };
 
 let config = Object.assign({}, _defaults);
@@ -157,7 +158,12 @@ let verifyAssertion = function (type, {challengeId, credentials}) {
 
 let disableMFA = function (userId) {
     check(userId, String);
-    Meteor.users.update({_id:userId}, {$unset:{"services.mfapublickey":true, "services.mfamethod":true}, $set:{"services.mfaenabled":false, [config.mfaDetailsField + ".enabled"]:false, [config.mfaDetailsField + ".type"]:null}});
+    Meteor.users.update({_id:userId}, {$unset:{"services.passwordlessenabled":true, "services.mfapublickey":true, "services.mfamethod":true}, $set:{"services.mfaenabled":false, [config.mfaDetailsField + ".enabled"]:false, [config.mfaDetailsField + ".type"]:null}});
+};
+
+let disablePasswordless = function (userId) {
+    check(userId, String);
+    Meteor.users.update({_id:userId}, {$unset:{"services.passwordlessenabled":true}, $set:{[config.mfaDetailsField + ".passwordless"]:false}});
 };
 
 let enableOTP = function (userId) {
@@ -319,8 +325,16 @@ Meteor.methods({
         return 200;
     },
 
-    [registrationChallengeHandlerU2F()]: async function () {
+    [registrationChallengeHandlerU2F()]: async function (params) {
         if(!config.enableU2F) return;
+        
+        try {
+            check(params, {passwordless:true, password:{digest:String, algorithm:"sha-256"}});
+            check(config.passwordless, true);
+        }
+        catch(e) {
+            check(params, {passwordless:false});
+        }
         
         if(!this.userId) {
             throw new Meteor.Error(403);
@@ -338,10 +352,19 @@ Meteor.methods({
             user:config.getUserDetails(this.userId)
         });
         
+        if(params.passwordless) {
+            let user = Meteor.users.findOne({_id:this.userId});
+            let checkPassword = Accounts._checkPassword(user, params.password);
+            if (checkPassword.error) {
+              throw new Meteor.Error(403, strings.incorrectPasswordError);
+            }
+        }
+        
         MFARegistrations.insert({
             challenge:challengeResponse.challenge,
             userId:this.userId,
-            method:"u2f"
+            method:"u2f",
+            passwordless:params.passwordless
         });
         
         return challengeResponse;
@@ -361,17 +384,18 @@ Meteor.methods({
             throw new Meteor.Error(404);
         }
         
-        let user = Meteor.users.findOne({_id:this.userId}, {fields:{"services.mfaenabled":1}});
+        let user = Meteor.users.findOne({_id:this.userId}, {fields:{"services.mfaenabled":1, "services.passwordlessenabled":1}});
         
-        if(user.services.mfaenabled === true) {
+        if(user.services.mfaenabled === true && (!registration.passwordless || user.services.passwordlessenabled)) {
             throw new Meteor.Error(400, strings.mfaAlreadyEnabledError);
         }
         
         Meteor.users.update({_id:this.userId}, {$set:{
-            [config.mfaDetailsField]:({enabled:true, type:"u2f"}),
+            [config.mfaDetailsField]:({enabled:true, type:"u2f", passwordless:registration.passwordless}),
             "services.mfapublickey":key,
             "services.mfaenabled":true,
-            "services.mfamethod":"u2f"
+            "services.mfamethod":"u2f",
+            "services.passwordlessenabled":registration.passwordless
         }});
         
         MFARegistrations.remove({_id:registration._id});
@@ -425,7 +449,7 @@ Meteor.methods({
         }
         
         check(username, userQueryValidator);
-        check(password, Object);
+        check(password, Match.OneOf({passwordless:true}, {digest:String, algorithm:"sha-256"}));
         
         let user = Accounts._findUserByQuery(username);
         
@@ -437,9 +461,20 @@ Meteor.methods({
             throw new Meteor.Error(400);
         }
         
-        let checkPassword = Accounts._checkPassword(user, password);
-        if (checkPassword.error) {
-          throw new Meteor.Error(403, strings.incorrectPasswordError);
+        if(password.passwordless) {
+            try {
+                check(user.services.passwordlessenabled, true);
+                check(config.passwordless, true);
+            }
+            catch(e) {
+                throw new Meteor.Error("not-passwordless", "Not Passwordless");
+            }
+        }
+        else {
+            let checkPassword = Accounts._checkPassword(user, password);
+            if (checkPassword.error) {
+              throw new Meteor.Error(403, strings.incorrectPasswordError);
+            }
         }
         
         let challengeConnectionHash = createConnectionHash(this.connection);
@@ -569,4 +604,4 @@ let getCurrentTOTP = function (secret) {
     return authenticator.generate(secret);
 };
 
-export default { verifyChallenge, getCurrentTOTP, enableOTP, setConfig, setStrings, disableMFA, generateChallenge, verifyAssertion, verifyAttestation:verifyAssertion };
+export default { disablePasswordless, verifyChallenge, getCurrentTOTP, enableOTP, setConfig, setStrings, disableMFA, generateChallenge, verifyAssertion, verifyAttestation:verifyAssertion };

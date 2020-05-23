@@ -20,8 +20,18 @@ let solveU2FChallenge = async function (c) {
     return {challengeId, challengeSecret, credentials};
 };
 
-let registerMFA = () => new Promise((resolve, reject) => {
-    Meteor.call(registrationChallengeHandlerU2F(), async (err, res) => {
+
+let registerMFA = (params) => new Promise((resolve, reject) => {
+    if(!params) {
+        params = {passwordless:false};
+    }
+    else {
+        if(typeof(params.password) === "string") {
+            params.password = Accounts._hashPassword(params.password);
+        }
+    }
+    
+    Meteor.call(registrationChallengeHandlerU2F(), params, async (err, res) => {
         if(err) {
             return reject(err);
         }
@@ -187,6 +197,37 @@ let finishLogin = (finishLoginParams, code) => new Promise(async (resolve, rejec
     });
 });
 
+let loginWithPasswordless = (query) => new Promise((resolve, reject) => {
+    Meteor.call(loginChallengeHandler(), query, {passwordless:true}, async (err, res) => {
+        if(err) {
+            if(err.code === "not-passwordless") {
+                resolve(true);
+            }
+            else {
+                reject(err);
+            }
+        }
+        else {
+            let methodName = loginCompletionHandler();
+            let methodArguments = await assembleChallengeCompletionArguments(res.finishLoginParams);
+            
+            Accounts.callLoginMethod({
+                methodName,
+                methodArguments,
+                userCallback:(err) => {
+                    if(err) {
+                        reject(err);
+                    }
+                    else {
+                        resolve();
+                    }
+                }
+            });
+        }
+    });
+});
+
+
 let loginWithMFA = (username, password) => new Promise((resolve, reject) => {
     Meteor.call(loginChallengeHandler(), username, Accounts._hashPassword(password), async (err, res) => {
         if(err) {
@@ -258,6 +299,8 @@ let authorizeAction = (type) => new Promise((resolve, reject) => {
 });
 
 export default {
+    loginWithPasswordless,
+    
     authorizeAction,
     useU2FAuthorizationCode,
     supportsU2FLogin,
