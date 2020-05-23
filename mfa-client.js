@@ -200,7 +200,7 @@ let finishLogin = (finishLoginParams, code) => new Promise(async (resolve, rejec
 let loginWithPasswordless = (query) => new Promise((resolve, reject) => {
     Meteor.call(loginChallengeHandler(), query, {passwordless:true}, async (err, res) => {
         if(err) {
-            if(err.error === "not-passwordless") {
+            if(err.error === "not-passwordless" || err.error === "not-mfa") {
                 resolve(true);
             }
             else {
@@ -235,9 +235,9 @@ let loginWithMFA = (username, password) => new Promise((resolve, reject) => {
         }
         
         let finishLoginParams = {res, _type:"login"};
-        let supportsU2FLogin = supportsU2FLogin();
+        let doesSupportU2FLogin = supportsU2FLogin();
         
-        resolve({supportsU2FLogin, method:res.method, finishLoginParams, finishParams:finishLoginParams});
+        resolve({supportsU2FLogin:doesSupportU2FLogin, method:res.method, finishLoginParams, finishParams:finishLoginParams});
     });
 });
 

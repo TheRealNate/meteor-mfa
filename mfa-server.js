@@ -458,7 +458,7 @@ Meteor.methods({
         }
         
         if(!user.services.mfaenabled) {
-            throw new Meteor.Error(400);
+            throw new Meteor.Error("not-mfa", "Not MFA");
         }
         
         if(password.passwordless) {
