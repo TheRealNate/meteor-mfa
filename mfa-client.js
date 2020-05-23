@@ -200,7 +200,7 @@ let finishLogin = (finishLoginParams, code) => new Promise(async (resolve, rejec
 let loginWithPasswordless = (query) => new Promise((resolve, reject) => {
     Meteor.call(loginChallengeHandler(), query, {passwordless:true}, async (err, res) => {
         if(err) {
-            if(err.code === "not-passwordless") {
+            if(err.error === "not-passwordless") {
                 resolve(true);
             }
             else {
@@ -209,7 +209,7 @@ let loginWithPasswordless = (query) => new Promise((resolve, reject) => {
         }
         else {
             let methodName = loginCompletionHandler();
-            let methodArguments = await assembleChallengeCompletionArguments(res.finishLoginParams);
+            let methodArguments = await assembleChallengeCompletionArguments({res});
             
             Accounts.callLoginMethod({
                 methodName,
