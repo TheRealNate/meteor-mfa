@@ -51,8 +51,7 @@ let _defaults = {
     mfaDetailsField:"mfa",
     challengeExpiry:(1000 * 60),
     getUserDetails:(userId) => {
-        let user = Meteor.users.findOne({_id:userId}, {fields:{username:1}});
-        return { id:userId, name:user.username };
+        return { id:userId, name:userId };
     },
     onFailedAssertion:() => {},
     enableU2F:true,
@@ -345,6 +344,10 @@ Meteor.methods({
         }
         catch(e) {
             throw new Error("config.rp has not been set. Must be set to {id:'your.domain.com', name:'Your App Name'}. Use MFA.setConfig({rp:{<...>}})");
+        }
+        
+        if(typeof(config.getUserDetails) !== "function") {
+            throw new Error(`config.getUserDetails should be a function: userId => ({id:"an id", name:"user's name"})`);
         }
         
         const challengeResponse = generateRegistrationChallenge({

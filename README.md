@@ -376,8 +376,11 @@ Disables passwordless for a user. When this method is called, MFA will remain en
 #### MFA.generateChallenge(userId, type)
 Generates a challenge. This is then sent to the client and passed into `MFA.solveChallenge()`
 
-#### MFA.verifyChallenge(type, solvedCHallenge)
+#### MFA.verifyChallenge(type, solvedChallenge)
 Verifies the solvedChallenge (created by `MFA.solveChallenge` on client).
+
+#### MFA.enableDebug()
+Enables debugging
 
 ### Config Options
 

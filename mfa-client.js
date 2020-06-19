@@ -4,8 +4,18 @@ import { solveRegistrationChallenge, solveLoginChallenge } from '@webauthn/clien
 
 import {authorizeActionChallengeHandler, authorizeActionCompletionHandler, resetPasswordCheckMFARequired, registrationChallengeHandlerTOTP, registrationCompletionHandlerTOTP, resetPasswordChallengeHandler, registrationChallengeHandlerU2F, registerCompletionHandlerU2F, loginChallengeHandler, loginCompletionHandler } from './method-names';
 
+let debug = false;
+
+let enableDebug = function () {
+    debug = true;
+};
+
 let solveU2FChallenge = async function (c) {
     let {challengeId, challengeSecret, assertionChallenge} = c;
+    
+    if(debug) {
+        console.debug("solveU2FChallenge called with challenge", assertionChallenge);
+    }    
     
     let credentials;
     try {
@@ -39,6 +49,9 @@ let registerMFA = (params) => new Promise((resolve, reject) => {
         let credentials;
         try {
             res.authenticatorSelection = {authenticatorAttachment:"cross-platform"};
+            if(debug) {
+                console.debug("registerU2F called with challenge", res);
+            }
             credentials = await solveRegistrationChallenge(res);
         }
         catch(e) {
@@ -319,6 +332,7 @@ export default {
     
     finishRegisterTOTP,
     registerTOTP,
+    enableDebug,
     
     // DEPRECATED in 0.0.3
     solve:solveU2FChallenge,
