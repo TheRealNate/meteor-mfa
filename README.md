@@ -6,6 +6,14 @@ This package was created to add support for U2F aka hardware keys. Hardware keys
 
 This package also supports OTPs (codes delivered via SMS, email, etc).
 
+#### What is passwordless?
+
+The majority of security experts agree, passwords are the weakest link when it comes to security. Forgotten and phished passwords cost companies millions of dollars and cause countless data breaches.
+
+For this reason, security expers and tech companies like Microsoft, Google, and Apple are encouraging a simple solution. No passwords.
+
+This package supports passwordless using U2F Security Keys.
+
 #### Known Issues
 - Password Resets that fail MFA authentication will still expire token (e.g. if used has a typo in their code they will require a new token)
 
