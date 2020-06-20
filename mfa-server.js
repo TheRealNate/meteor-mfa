@@ -94,6 +94,8 @@ let isExpired = function (expiryDate) {
 };
 
 const generateChallenge = function (userId, type, challengeConnectionHash) {
+    check(challengeConnectionHash, String);
+    
     let user = Meteor.users.findOne({_id:userId}, {fields:{"services.mfapublickey":1, "services.mfaenabled":1, "services.mfamethod":1}});
     
     if(!user || !user.services.mfaenabled) {
@@ -235,7 +237,7 @@ let invalidateU2FAuthorization = function (authorizationId) {
         authenticated:false,
         useDate:new Date()
     }});
-}
+};
 
 const invalidateChallenge = function (challengeId) {
     if(config.keepChallenges) {
@@ -247,13 +249,14 @@ const invalidateChallenge = function (challengeId) {
 };
 
 const verifyChallenge = function (userId, type, challengeConnectionHash, params) {
+    check(userId, Match.OneOf(String, null));
+    check(type, String);
+    check(challengeConnectionHash, String);
+    check(params, Object);
     let {challengeId, challengeSecret} = params;
     check(challengeId, String);
     check(challengeSecret, String);
     
-    if(!challengeConnectionHash) {
-        challengeConnectionHash = createConnectionHash(this.connection);
-    }
     let challengeObj = MFAChallenges.findOne({_id:challengeId});
     
     if(userId === null && type !== "login") {
