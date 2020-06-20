@@ -195,18 +195,13 @@ This package exposes the `MFA.generateChallenge` and `MFA.verifyChallenge` metho
 ````
 Meteor.methods({
   "start:disableMFA":function () {
-    let challenge = MFA.generateChallenge(this.userId, "disableMFA");
+    let challenge = MFA.generateChallenge(this.userId, "disableMFA", MFA.generateConnectionHash(this.connection));
     return challenge;
   },
   
   "complete:disableMFA":function (solvedChallenge) {
-    let isValid = MFA.verifyChallenge("disableMFA", solvedChallenge);
-    
-    if(!isValid) {
-      throw new Meteor.Error(404, "MFA Challenge Failed");
-    }
-    
-    MFA.disableMFA(this.userId);
+    let userId = MFA.verifyChallenge(this.userId, "disableMFA", MFA.generateConnectionHash(this.connection), solvedChallenge);
+    MFA.disableMFA(userId);
   }  
 });
 ````
@@ -381,14 +376,22 @@ Disables MFA for a user. This is an internal method. If you'd like the user to a
 #### MFA.disablePasswordless(userId)
 Disables passwordless for a user. When this method is called, MFA will remain enabled. To disable passwordless and MFA, call `MFA.disableMFA`.
 
-#### MFA.generateChallenge(userId, type)
-Generates a challenge. This is then sent to the client and passed into `MFA.solveChallenge()`
+#### MFA.generateChallenge(userId, type, connectionHash)
+Generates a challenge. This is then sent to the client and passed into `MFA.solveChallenge()`. See connectionHash below.
 
-#### MFA.verifyChallenge(type, solvedChallenge)
-Verifies the solvedChallenge (created by `MFA.solveChallenge` on client).
+#### MFA.verifyChallenge(userId, type, connectionHash, solvedChallenge)
+Verifies the solvedChallenge (created by `MFA.solveChallenge` on client). Throws an error on failiure, returns the userId that generated the challenge on success.
+
+The userId argument is used to verify that the user that you generated the challenge for is the same as the user you are verifying the challenge for, so you should typically pass in this.userId, or however you can get the current user id. In situations where you are performing this kind of verification in another way, set userId to null.
 
 #### MFA.enableDebug()
 Enables debugging
+
+#### MFA.generateConnectionHash(connection)
+Creates a connection hash per the config.
+
+#### connectionHash
+The connection hash ensures that the same device that creates the challenge is the one that verifies/uses it. When using `MFA.generateChallenge` or `MFA.verifyChallenge`, you can use the `MFA.generateConnectionHash` method to create one, or if you do not need it you can pass an empty string.
 
 ### Config Options
 

@@ -62,7 +62,8 @@ let _defaults = {
     allowU2FAuthorization:true,
     authorizationDisabledMethods:[],
     keepChallenges:false,
-    passwordless:false
+    passwordless:false,
+    ignoreNullUserIdVerifyChallengeTypes:[]
 };
 
 let config = Object.assign({}, _defaults);
@@ -92,11 +93,15 @@ let isExpired = function (expiryDate) {
     return new Date() >= expiryDate;
 };
 
-let generateChallenge = function (userId, type, challengeConnectionHash) {
+const generateChallenge = function (userId, type, challengeConnectionHash) {
     let user = Meteor.users.findOne({_id:userId}, {fields:{"services.mfapublickey":1, "services.mfaenabled":1, "services.mfamethod":1}});
     
     if(!user || !user.services.mfaenabled) {
         throw new Meteor.Error(400);
+    }
+    
+    if(!challengeConnectionHash && !(challengeConnectionHash === null && type === "login")) {
+        throw new Error("MFA.generateChallenge: Missing connectionHash. If you don't want to use a hash, pass an empty string when generating and validating a chalenge.");
     }
     
     check(user.services.mfamethod, Match.OneOf(...mfaMethods));
@@ -203,6 +208,27 @@ let u2fAuthorizationIsValid = function (authorization) {
     return authorization instanceof Object && !authorization.used && !isExpired(authorization.expires) && authorization.authenticated === true;
 };
 
+const nullUserIdVerifyChallengeError = type =>  `
+WARNING: you are passing null as userId for verifyChallenge
+This means that verifyChallenge will not ensure that the current userId
+is the same as the userId that the challenge was generated for.
+
+This can be a major security vulnerability, as a challenge solved by one
+user can be used as a solved challenge for a different user.
+
+You should only use null for userId if you are preventing this kind of
+vulnerability yourself. For example, using the userId value returned by
+MFA.verifyChallenge().
+
+To stop this warning from appearing, set
+config.ignoreNullUserIdVerifyChallengeTypes to an array that includes ${type}:
+
+MFA.setConfig({ignoreNullUserIdVerifyChallengeTypes:["${type}"]});
+
+This error will be thrown in development, but will only be a warning in
+production.
+`;
+
 let invalidateU2FAuthorization = function (authorizationId) {
     MFAAuthorizations.update({_id:authorizationId}, {$set:{
         used:true,
@@ -220,13 +246,26 @@ const invalidateChallenge = function (challengeId) {
     }
 };
 
-const verifyChallenge = function (type, params) {
+const verifyChallenge = function (userId, type, challengeConnectionHash, params) {
     let {challengeId, challengeSecret} = params;
     check(challengeId, String);
     check(challengeSecret, String);
     
-    let challengeConnectionHash = createConnectionHash(this.connection);
+    if(!challengeConnectionHash) {
+        challengeConnectionHash = createConnectionHash(this.connection);
+    }
     let challengeObj = MFAChallenges.findOne({_id:challengeId});
+    
+    if(userId === null && type !== "login") {
+        let err = nullUserIdVerifyChallengeError(type);
+        
+        if(Meteor.isDevelopment) {
+            throw new Error(err);
+        }
+        else {
+            console.warn(err);
+        }
+    }
     
     if(
         !challengeObj
@@ -235,6 +274,7 @@ const verifyChallenge = function (type, params) {
         || challengeObj.challengeSecret !== challengeSecret
         || challengeObj.expires < new Date()
         || challengeObj.used === true
+        || (challengeObj.userId !== userId && userId !== null)
     ) {
         throw new Meteor.Error(404);
     }
@@ -488,7 +528,7 @@ Meteor.methods({
         check(params.challengeId, String);
         check(params.challengeSecret, String);
         
-        let userId = verifyChallenge("login", params);
+        let userId = verifyChallenge(null, "login", createConnectionHash(this.connection), params);
         
         return Accounts._attemptLogin(this, 'login', '', {
           type: 'mfa',
@@ -544,7 +584,7 @@ Meteor.methods({
             throw new Meteor.Error(400);
         }
         
-        verifyChallenge(("authorize:" + authorizationId), solvedU2FChallenge);
+        verifyChallenge(this.userId, ("authorize:" + authorizationId), createConnectionHash(this.connection), solvedU2FChallenge);
         
         let code = generateCode();
         
@@ -584,7 +624,7 @@ Accounts.validateLoginAttempt(options => {
             let params = options.methodArguments[2];
             
             try {
-                verifyChallenge("resetPassword", params);
+                verifyChallenge(options.user._id, "resetPassword", createConnectionHash(options.connection), params);
                 return true;
             }
             catch(e) {
@@ -607,4 +647,4 @@ let getCurrentTOTP = function (secret) {
     return authenticator.generate(secret);
 };
 
-export default { disablePasswordless, verifyChallenge, getCurrentTOTP, enableOTP, setConfig, setStrings, disableMFA, generateChallenge, verifyAssertion, verifyAttestation:verifyAssertion };
+export default { generateConnectionHash:createConnectionHash, disablePasswordless, verifyChallenge, getCurrentTOTP, enableOTP, setConfig, setStrings, disableMFA, generateChallenge, verifyAssertion, verifyAttestation:verifyAssertion };
