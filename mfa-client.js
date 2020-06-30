@@ -25,6 +25,9 @@ let solveU2FChallenge = async function (c) {
         if(e.name === "NotAllowedError") {
             throw new Meteor.Error("user-cancelled", "The user cancelled the request or the request timed out");
         }
+        else {
+            throw e;
+        }
     }
     
     return {challengeId, challengeSecret, credentials};
