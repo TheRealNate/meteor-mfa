@@ -138,6 +138,7 @@ const generateChallenge = function (userId, type, challengeConnectionHash) {
 };
 
 let verifyAssertion = function (type, {challengeId, credentials}) {
+    check(challengeId, String);
     check(credentials, publicKeyCredentialSchema);
     
     let challengeObj = MFAChallenges.findOne({_id:challengeId});
