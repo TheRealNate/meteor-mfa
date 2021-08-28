@@ -56,7 +56,7 @@ You can then follow the instructions below for setting up U2F and/or OTP.
 <h3 id="u2f">Universal 2nd Factor (U2F)</h3>
 
 First, Set required configuration fields on server:
-````
+````js
 import MFA from 'meteor/ndev:mfa';
 
 MFA.setConfig({
@@ -68,7 +68,7 @@ MFA.setConfig({
 ````
 
 And add the ability for users to enable MFA from the client
-````
+````js
 import MFA from 'meteor/ndev:mfa';
 
 MFA.registerU2F().then(r => {
@@ -83,7 +83,7 @@ MFA.registerU2F().then(r => {
 One-Time-Passwords are codes typically sent via SMS or Email. This package takes a very simplistic approach to enrollment in order to let you control how the codes get delivered.
 
 First, enable OTP in the config, and define a function for sending codes:
-````
+````js
 MFA.setConfig({
   enableOTP:true,
   onSendOTP:(userId, code) => {...}
@@ -91,7 +91,7 @@ MFA.setConfig({
 ````
 
 And simply call this function from the server to enable OTP MFA for a user (note that it will fail if MFA is already enabled):
-````
+````js
 MFA.enableOTP(userId);
 ````
 
@@ -101,7 +101,7 @@ Since you have full control over how a code is sent, it is up to you to maintain
 
 Time-Based One Time Passwords are generated from an app. The client can register their TOTP device like so:
 
-````
+````js
 MFA.registerTOTP().then(r => {
   // The secret can be retrieved from r.secret, and should be shown to the user in a QR code
   // You should save r.registrationId to be used when calling MFA.finishRegisterTOTP later
@@ -138,7 +138,7 @@ For OTP and TOTP: you can store finishLoginParams, update your UI to collect the
 
 Here is a simple example:
 
-````
+````js
 import MFA from 'meteor/ndev:mfa';
 
 MFA.login(username, password).then(({method, finishLoginParams}) => {
@@ -167,7 +167,7 @@ The `config.requireResetPasswordMFA` property defines whether a user must authen
 
 To reset a password with MFA authentication, use the `MFA.resetPassword` method. The usage of this method is very similar to the usage of `MFA.login`:
 
-````
+````js
 MFA.resetPassword(token, newPassword).then(r => {
   if(r.method === null) {
     // The user doesn't have MFA enabled
@@ -192,7 +192,7 @@ You should also set `config.requireResetPasswordMFA` to true. This will require 
 
 This package exposes the `MFA.generateChallenge` and `MFA.verifyChallenge` methods which allow you to integrate U2F authentication into your method. See an example below which requires the user authenticates before they can disable MFA:
 
-````
+````js
 Meteor.methods({
   "start:disableMFA":function () {
     let challenge = MFA.generateChallenge(this.userId, "disableMFA", MFA.generateConnectionHash(this.connection));
@@ -217,7 +217,7 @@ This one-time-code can then be passed to a different device to allow it to do so
 **The `MFA.authorizeAction` method can only be used for accounts with U2F mfa.**
 
 Here is how you generate the one-time-code:
-````
+````js
 MFA.authorizeAction(type).then(code => { // Type should refer to the action. If the one-time-code is for logging in, it should be "login"
   // Display the code in the UI
 }).reject(e => {
@@ -227,7 +227,7 @@ MFA.authorizeAction(type).then(code => { // Type should refer to the action. If 
 
 On the other device, you collect the code and wrap it with the `MFA.useU2FAuthorizationCode(code)` method.
 
-````
+````js
 MFA.loginWithMFA(username, password).then((r) => {
   if(r.method === "u2f") {
     let code = prompt("Please enter your authorization code generated from another device"); // As always, you should never use prompt, this is just an example
@@ -239,7 +239,7 @@ MFA.loginWithMFA(username, password).then((r) => {
 In order to design your login flows better, the package exposes the method `MFA.supportsU2FLogin()`. This attempts to detect whether the browser will support a u2f login. As a convenience, this value is also passed in the resolution of `MFA.login` or `MFA.loginWithMFA`. If the value is false, show the user instructions to generate a code on another device along with an input for them to enter the code.
 
 Here is a complete login example:
-````
+````js
 import MFA from 'meteor/ndev:mfa';
 
 MFA.login(username, password).then(({method, finishLoginParams, supportsU2FLogin}) => {
@@ -278,7 +278,7 @@ This package enables passwordless login in a straightforward way. It is also fle
 
 Passwordless is disabled by default. On the server, set `config.passwordless` to `true`:
 
-````
+````js
 MFA.setConfig({passwordless:true});
 ````
 
@@ -286,7 +286,7 @@ MFA.setConfig({passwordless:true});
 
 To enable passwordless for a user, call `MFA.registerU2F` on the client with the following options:
 
-````
+````js
 MFA.registerU2F({passwordless:true, password:"user's current password here"}).then(() => {
   // All done!
 }).catch(e => {
@@ -298,7 +298,7 @@ MFA.registerU2F({passwordless:true, password:"user's current password here"}).th
 
 On the client, call `MFA.loginWithPasswordless`. This method will catch only due to an error with U2F. If the user does not have passwordless enabled, it will resolve with `passwordRequired` as `true`:
 
-````
+````js
 MFA.loginWithPasswordless("email or username here").then(passwordRequired => {
   if(passwordRequired) {
     // User doesn't have passwordless enabled. Show regular login form.
@@ -336,7 +336,7 @@ Completes a login
 #### MFA.registerU2F(params)<promise>
 Registers the user's U2F device and enables MFA. To just enable MFA, call without any arguments. To enable MFA and passwordless, call with the following params:
 
-````
+````js
 {passwordless:true, password:"..."}
 ````
 
